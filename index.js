@@ -171,7 +171,7 @@ class App {
         const sessions = whatsapp.getAllSession();
         if (sessions.includes(sessionId)) {
           ws.on("close", () => {
-            console.log(`Client disconnected for session ${sessionId}`);
+            console.log(`Client disconnected for session ANJING ${sessionId}`);
             ws.close();
             clearInterval(interval); // Clear ping interval on close
             delete this.wsClients[sessionId]; // Remove client reference on disconnect
@@ -186,7 +186,8 @@ class App {
       }
 
       ws.on("close", (code, reason) => {
-        console.log(`WebSocket closed: ${code}, Reason: ${reason || "Unknown reason"}`);
+        console.log(`WebSocket closed: ${code}, Reason ANJING: ${reason || "Unknown reason"}`);
+        ws.close();
         clearInterval(interval); // Clear ping-pong interval
         delete this.wsClients[sessionId]; // Remove reference when closed
       });
