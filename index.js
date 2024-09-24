@@ -84,12 +84,6 @@ class App {
 
     // Attach WebSocket server to the HTTPS server
     this.wss = new WebSocketServer({ server });
-
-    server.on("upgrade", (request, socket, head) => {
-      this.wss.handleUpgrade(request, socket, head, (ws) => {
-        this.wss.emit("connection", ws, request);
-      });
-    });
   }
 
   // Fungsi untuk inisialisasi sesi WhatsApp dan kirim QR Code melalui WebSocket
