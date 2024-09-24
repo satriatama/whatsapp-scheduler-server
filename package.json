@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "pino-pretty": "^11.2.2",
+    "qrcode": "^1.5.4",
+    "wa-multi-session": "^3.5.0",
+    "ws": "^8.18.0"
+  },
+  "type": "module"
+}
