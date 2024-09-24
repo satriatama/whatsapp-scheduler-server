@@ -8,7 +8,7 @@ import { WebSocketServer } from "ws";
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
-const wss = new WebSocketServer("wss://satriatama.me:3001");
+const wss = new WebSocketServer({ port:8080 });
 
 const wsClients = {};
 
