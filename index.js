@@ -72,7 +72,7 @@ class App {
 
     this.express.use("/", router);
 
-    //  Server creation starts here
+    // Server creation starts here
     const server = https.createServer({ key, cert }, this.express);
     server.listen(3001, (err) => {
       if (err) {
@@ -100,7 +100,11 @@ class App {
       socket.ev.on("connection.update", (update) => {
         const { qr, connection } = update;
         console.log("WebSocket state:", ws ? "Connected" : "Not connected");
-        ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code
+        if (qr) {
+          ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code
+        } else if (connection === "open") {
+          ws.send(JSON.stringify({ type: "connected", data: "connected" })); // Kirim status connected
+        }
       });
     } catch (error) {
       console.error("Error starting session:", error);
@@ -148,12 +152,29 @@ class App {
         this.wsClients[sessionId] = ws;
         console.log(`Client connected for session ${sessionId}`);
 
+        // Handle ping-pong to keep the connection alive
+        ws.isAlive = true;
+        ws.on('pong', () => {
+          ws.isAlive = true;
+        });
+
+        const interval = setInterval(() => {
+          if (!ws.isAlive) {
+            console.log("Terminating connection due to inactivity");
+            ws.terminate();
+            return;
+          }
+          ws.isAlive = false;
+          ws.ping();
+        }, 30000); // Ping every 30 seconds
+
         try {
           const sessions = whatsapp.getAllSession();
           if (sessions.includes(sessionId)) {
             ws.on("close", () => {
               console.log(`Client disconnected for session ${sessionId}`);
               delete this.wsClients[sessionId];
+              clearInterval(interval); // Clear interval on close
             });
           } else {
             this.initializeSession(sessionId, ws);
@@ -164,9 +185,14 @@ class App {
           throw new Error("Failed to start WhatsApp session");
         }
 
-        ws.on("close", () => {
-          console.log(`Client disconnected for session ${sessionId}`);
+        ws.on("close", (code, reason) => {
+          console.log(`WebSocket closed: ${code}, Reason: ${reason}`);
           delete this.wsClients[sessionId];
+          clearInterval(interval); // Clear interval on close
+        });
+
+        ws.on("error", (error) => {
+          console.error(`WebSocket error: ${error}`);
         });
       }
     });
