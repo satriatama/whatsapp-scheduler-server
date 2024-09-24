@@ -140,8 +140,8 @@ class App {
     this.wss.on("connection", (ws, req) => {
       const sessionId = "satriatama"; // Set a unique session ID for the client
 
-      // Check if session already exists, if so, terminate the previous connection
-      if (this.wsClients[sessionId]) {
+      // Cek jika session sudah ada dan ws belum disconnect
+      if (this.wsClients[sessionId] && this.wsClients[sessionId].readyState === ws.OPEN) {
         console.log(`Session ${sessionId} already connected. Terminating previous connection.`);
         this.wsClients[sessionId].terminate(); // Close the old WebSocket connection
       }
