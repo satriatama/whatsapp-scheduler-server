@@ -1,172 +1,176 @@
 import express from "express";
-import * as whatsapp from "wa-multi-session";
-import multer from "multer"; // Untuk menangani upload file
+import https from "https";
 import fs from "fs";
 import path from "path";
+import multer from "multer";
 import { WebSocketServer } from "ws";
+import * as whatsapp from "wa-multi-session";
 
-// Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
-const upload = multer({ dest: "uploads/" });
-
-const wss = new WebSocketServer({ port:6969 });
-
-const wsClients = {};
-
-// Fungsi untuk memulai sesi WhatsApp jika belum ada
-async function initializeSession(sessionId, ws) {
-  try {
-    const socket = await whatsapp.startSession(sessionId);
-      // Daftarkan event listener untuk QR code
-    socket.ev.on("connection.update", (update) => {
-      const { qr, connection } = update;
-      console.log("WebSocket state:", ws ? "Connected" : "Not connected");
-      ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code melalui WebSocket jika ws tersedia dan terbuka
-    });
-  } catch (error) {
-    console.error("Error starting session:", error);
-    throw new Error("Failed to start WhatsApp session");
-  }
-}
-
-// Fungsi utama untuk mengirim pesan
-async function sendMessage({ sessionId, message, recipients, filePath }) {
-  try {
-    console.log("Sending message to recipients:", recipients);
-
-    // Mengirim pesan teks ke setiap penerima
-    await whatsapp.sendTextMessage({
-      sessionId,
-      to: recipients,
-      text: message,
-    });
-
-    // Jika ada file yang harus dikirim
-    if (filePath) {
-      await whatsapp.sendMediaMessage({
-        sessionId,
-        to: recipients,
-        filePath, // path file yang dikirim
-      });
-    }
-
-    console.log("Message sent successfully");
-  } catch (error) {
-    console.error("Error during message sending:", error);
-    throw new Error("Failed to send message");
-  }
-}
-
-// Fungsi untuk menjadwalkan pengiriman pesan
-function scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
-  const currentTime = new Date();
-  const scheduleTime = new Date(schedule);
-
-  // Hitung selisih waktu dalam milidetik
-  const delay = scheduleTime - currentTime;
-  console.log("delay: ", delay);
-
-  // Jika waktu yang dijadwalkan sudah lewat, kirim pesan langsung
-  if (delay <= 0) {
-    return sendMessage({ sessionId, message, recipients, filePath });
+class App {
+  constructor() {
+    this.express = express();
+    this.wsClients = {};
+    this.wss = null;
+    this.startServer();
+    this.setupWebSocket();
   }
 
-  // Jadwalkan pengiriman pesan
-  setTimeout(() => {
-    sendMessage({ sessionId, message, recipients, filePath });
-  }, delay);
-}
+  startServer() {
+    const key = fs.readFileSync("key-rsa.pem");
+    const cert = fs.readFileSync("cert.pem");
 
-// Inisialisasi Express
-const app = express();
-const port = 3001;
+    const upload = multer({ dest: "uploads/" });
 
-// Parsing form data dan JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+    // Middleware untuk parsing form data dan JSON
+    this.express.use(express.json());
+    this.express.use(express.urlencoded({ extended: true }));
 
-// Route API untuk menangani pengiriman pesan
-app.post("/api/send-message", upload.single("file"), async (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  try {
-    const { message, recipients, schedule, username } = req.body;
-    const sessionId = username;
+    // Setup routes
+    const router = express.Router();
 
-    console.log("Request body:", req.body);
+    router.post("/api/send-message", upload.single("file"), async (req, res) => {
+      res.header("Access-Control-Allow-Origin", "*");
+      try {
+        const { message, recipients, schedule, username } = req.body;
+        const sessionId = username;
 
-    const recipientsArray = JSON.parse(recipients); // Parse JSON string for recipients
+        console.log("Request body:", req.body);
 
-    // Jika ada file yang diupload
-    let filePath = null;
-    if (req.file) {
-      filePath = path.join(__dirname, req.file.path); // Path file yang diupload
-    }
+        const recipientsArray = JSON.parse(recipients); // Parse JSON string for recipients
 
-    const sessions = whatsapp.getAllSession();
-    if (!sessions.includes(sessionId)) {
-      console.log(`Session ${sessionId} not started yet`);
-      whatsapp.startSession(sessionId);
-    }
+        // Jika ada file yang diupload
+        let filePath = null;
+        if (req.file) {
+          filePath = path.join(__dirname, req.file.path); // Path file yang diupload
+        }
 
-    // Panggil fungsi scheduleMessage untuk mengatur jadwal pengiriman pesan
-    scheduleMessage({
-      sessionId,
-      message,
-      recipients: recipientsArray,
-      schedule,
-      filePath,
-    });
+        const sessions = whatsapp.getAllSession();
+        if (!sessions.includes(sessionId)) {
+          console.log(`Session ${sessionId} not started yet`);
+          whatsapp.startSession(sessionId);
+        }
 
-    res.json({ success: true, message: "Pesan berhasil dijadwalkan!" });
-  } catch (error) {
-    console.error("Error in API:", error);
-    res.status(500).json({ error: "Gagal menjadwalkan pesan." });
-  } finally {
-    // Hapus file setelah dikirim (optional)
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-  }
-});
-
-app.server = app.listen(port, () => {
-  console.log(`Server berjalan di http://localhost:${port}`);
-});
-
-// Upgrade HTTP server to handle WebSocket
-app.server.on("upgrade", (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit("connection", ws, request);
-  });
-});
-
-// WebSocket connection logic
-wss.on("connection", (ws, req) => {
-  const sessionId = "satriatama"
-
-  if (sessionId) {
-    wsClients[sessionId] = ws; // Simpan WebSocket client berdasarkan sessionId
-    console.log(`Client connected for session ${sessionId}`);
-    // Inisialisasi sesi dan kirim QR code atau pesan connected
-    try {
-      const sessions = whatsapp.getAllSession();
-      if (sessions.includes(sessionId)) {
-        console.log(`Session ${sessionId} already started`);
-        ws.on("close", () => {
-          console.log(`Client disconnected for session ${sessionId}`);
-          delete wsClients[sessionId]; // Hapus client ketika terputus
+        // Panggil fungsi scheduleMessage untuk mengatur jadwal pengiriman pesan
+        this.scheduleMessage({
+          sessionId,
+          message,
+          recipients: recipientsArray,
+          schedule,
+          filePath,
         });
-      } else {
-        initializeSession(sessionId, ws);
-        console.log(`Session ${sessionId} started successfully`);
+
+        res.json({ success: true, message: "Pesan berhasil dijadwalkan!" });
+      } catch (error) {
+        console.error("Error in API:", error);
+        res.status(500).json({ error: "Gagal menjadwalkan pesan." });
+      } finally {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
       }
+    });
+
+    this.express.use("/", router);
+
+    //  Server creation starts here
+    const server = https.createServer({ key, cert }, this.express);
+    server.listen(3001, (err) => {
+      if (err) {
+        console.log("Well, this didn't work...");
+        process.exit();
+      }
+      console.log("Server is listening on port 3001");
+    });
+
+    // Attach WebSocket server to the HTTPS server
+    this.wss = new WebSocketServer({ server });
+
+    server.on("upgrade", (request, socket, head) => {
+      this.wss.handleUpgrade(request, socket, head, (ws) => {
+        this.wss.emit("connection", ws, request);
+      });
+    });
+  }
+
+  // Fungsi untuk inisialisasi sesi WhatsApp dan kirim QR Code melalui WebSocket
+  async initializeSession(sessionId, ws) {
+    try {
+      const socket = await whatsapp.startSession(sessionId);
+
+      socket.ev.on("connection.update", (update) => {
+        const { qr, connection } = update;
+        console.log("WebSocket state:", ws ? "Connected" : "Not connected");
+        ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code
+      });
     } catch (error) {
       console.error("Error starting session:", error);
       throw new Error("Failed to start WhatsApp session");
     }
+  }
 
-    ws.on("close", () => {
-      console.log(`Client disconnected for session ${sessionId}`);
-      delete wsClients[sessionId]; // Hapus client ketika terputus
+  // Fungsi untuk menjadwalkan pengiriman pesan
+  scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
+    const currentTime = new Date();
+    const scheduleTime = new Date(schedule);
+    const delay = scheduleTime.getTime() - currentTime.getTime();
+
+    if (delay <= 0) {
+      this.sendMessage({ sessionId, message, recipients, filePath });
+    } else {
+      setTimeout(() => {
+        this.sendMessage({ sessionId, message, recipients, filePath });
+      }, delay);
+    }
+  }
+
+  // Fungsi untuk mengirim pesan
+  async sendMessage({ sessionId, message, recipients, filePath }) {
+    try {
+      console.log("Sending message to recipients:", recipients);
+      await whatsapp.sendTextMessage({ sessionId, to: recipients, text: message });
+
+      if (filePath) {
+        await whatsapp.sendMediaMessage({ sessionId, to: recipients, filePath });
+      }
+      console.log("Message sent successfully");
+    } catch (error) {
+      console.error("Error during message sending:", error);
+      throw new Error("Failed to send message");
+    }
+  }
+
+  setupWebSocket() {
+    // WebSocket connection logic
+    this.wss.on("connection", (ws, req) => {
+      const sessionId = "satriatama";
+
+      if (sessionId) {
+        this.wsClients[sessionId] = ws;
+        console.log(`Client connected for session ${sessionId}`);
+
+        try {
+          const sessions = whatsapp.getAllSession();
+          if (sessions.includes(sessionId)) {
+            ws.on("close", () => {
+              console.log(`Client disconnected for session ${sessionId}`);
+              delete this.wsClients[sessionId];
+            });
+          } else {
+            this.initializeSession(sessionId, ws);
+            console.log(`Session ${sessionId} started successfully`);
+          }
+        } catch (error) {
+          console.error("Error starting session:", error);
+          throw new Error("Failed to start WhatsApp session");
+        }
+
+        ws.on("close", () => {
+          console.log(`Client disconnected for session ${sessionId}`);
+          delete this.wsClients[sessionId];
+        });
+      }
     });
   }
-});
+}
+
+export default new App().express;
