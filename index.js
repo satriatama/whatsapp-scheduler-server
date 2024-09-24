@@ -9,7 +9,7 @@ import * as whatsapp from "wa-multi-session";
 class App {
   constructor() {
     this.express = express();
-    this.wsClients = {};
+    this.wsClients = {}; // Store connected WebSocket clients
     this.wss = null;
     this.startServer();
     this.setupWebSocket();
@@ -21,7 +21,7 @@ class App {
 
     const upload = multer({ dest: "uploads/" });
 
-    // Middleware untuk parsing form data dan JSON
+    // Middleware for parsing form data and JSON
     this.express.use(express.json());
     this.express.use(express.urlencoded({ extended: true }));
 
@@ -38,10 +38,10 @@ class App {
 
         const recipientsArray = JSON.parse(recipients); // Parse JSON string for recipients
 
-        // Jika ada file yang diupload
+        // If a file is uploaded
         let filePath = null;
         if (req.file) {
-          filePath = path.join(__dirname, req.file.path); // Path file yang diupload
+          filePath = path.join(__dirname, req.file.path); // Path of uploaded file
         }
 
         const sessions = whatsapp.getAllSession();
@@ -50,7 +50,7 @@ class App {
           whatsapp.startSession(sessionId);
         }
 
-        // Panggil fungsi scheduleMessage untuk mengatur jadwal pengiriman pesan
+        // Call the function to schedule the message
         this.scheduleMessage({
           sessionId,
           message,
@@ -59,20 +59,20 @@ class App {
           filePath,
         });
 
-        res.json({ success: true, message: "Pesan berhasil dijadwalkan!" });
+        res.json({ success: true, message: "Message scheduled successfully!" });
       } catch (error) {
         console.error("Error in API:", error);
-        res.status(500).json({ error: "Gagal menjadwalkan pesan." });
+        res.status(500).json({ error: "Failed to schedule message." });
       } finally {
         if (req.file && fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
+          fs.unlinkSync(req.file.path); // Remove uploaded file after processing
         }
       }
     });
 
     this.express.use("/", router);
 
-    // Server creation starts here
+    // Create the HTTPS server
     const server = https.createServer({ key, cert }, this.express);
     server.listen(3001, (err) => {
       if (err) {
@@ -86,18 +86,17 @@ class App {
     this.wss = new WebSocketServer({ server });
   }
 
-  // Fungsi untuk inisialisasi sesi WhatsApp dan kirim QR Code melalui WebSocket
+  // Initialize WhatsApp session and send QR Code through WebSocket
   async initializeSession(sessionId, ws) {
     try {
       const socket = await whatsapp.startSession(sessionId);
 
       socket.ev.on("connection.update", (update) => {
         const { qr, connection } = update;
-        console.log("WebSocket state:", ws ? "Connected" : "Not connected");
         if (qr) {
-          ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code
+          ws.send(JSON.stringify({ type: "qr", data: qr })); // Send QR code to client
         } else if (connection === "open") {
-          ws.send(JSON.stringify({ type: "connected", data: "connected" })); // Kirim status connected
+          ws.send(JSON.stringify({ type: "connected", data: "connected" })); // Send status connected
         }
       });
     } catch (error) {
@@ -106,7 +105,7 @@ class App {
     }
   }
 
-  // Fungsi untuk menjadwalkan pengiriman pesan
+  // Schedule a message to be sent later
   scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
     const currentTime = new Date();
     const scheduleTime = new Date(schedule);
@@ -121,7 +120,7 @@ class App {
     }
   }
 
-  // Fungsi untuk mengirim pesan
+  // Send a message via WhatsApp
   async sendMessage({ sessionId, message, recipients, filePath }) {
     try {
       console.log("Sending message to recipients:", recipients);
@@ -138,57 +137,61 @@ class App {
   }
 
   setupWebSocket() {
-    // WebSocket connection logic
     this.wss.on("connection", (ws, req) => {
-      const sessionId = "satriatama";
+      const sessionId = "satriatama"; // Set a unique session ID for the client
 
-      if (sessionId) {
-        this.wsClients[sessionId] = ws;
-        console.log(`Client connected for session ${sessionId}`);
-
-        // Handle ping-pong to keep the connection alive
-        ws.isAlive = true;
-        ws.on('pong', () => {
-          ws.isAlive = true;
-        });
-
-        const interval = setInterval(() => {
-          if (!ws.isAlive) {
-            console.log("Terminating connection due to inactivity");
-            ws.terminate();
-            return;
-          }
-          ws.isAlive = false;
-          ws.ping();
-        }, 30000); // Ping every 30 seconds
-
-        try {
-          const sessions = whatsapp.getAllSession();
-          if (sessions.includes(sessionId)) {
-            ws.on("close", () => {
-              console.log(`Client disconnected for session ${sessionId}`);
-              delete this.wsClients[sessionId];
-              clearInterval(interval); // Clear interval on close
-            });
-          } else {
-            this.initializeSession(sessionId, ws);
-            console.log(`Session ${sessionId} started successfully`);
-          }
-        } catch (error) {
-          console.error("Error starting session:", error);
-          throw new Error("Failed to start WhatsApp session");
-        }
-
-        ws.on("close", (code, reason) => {
-          console.log(`WebSocket closed: ${code}, Reason: ${reason}`);
-          delete this.wsClients[sessionId];
-          clearInterval(interval); // Clear interval on close
-        });
-
-        ws.on("error", (error) => {
-          console.error(`WebSocket error: ${error}`);
-        });
+      // Check if session already exists, if so, terminate the previous connection
+      if (this.wsClients[sessionId]) {
+        console.log(`Session ${sessionId} already connected. Terminating previous connection.`);
+        this.wsClients[sessionId].terminate(); // Close the old WebSocket connection
       }
+
+      // Store the new WebSocket connection
+      this.wsClients[sessionId] = ws;
+      console.log(`Client connected for session ${sessionId}`);
+
+      // Handle ping-pong to keep the connection alive
+      ws.isAlive = true;
+      ws.on('pong', () => {
+        ws.isAlive = true;
+      });
+
+      const interval = setInterval(() => {
+        if (!ws.isAlive) {
+          console.log("Terminating connection due to inactivity");
+          ws.terminate();
+          return;
+        }
+        ws.isAlive = false;
+        ws.ping();
+      }, 30000); // Ping every 30 seconds to check if the connection is alive
+
+      try {
+        const sessions = whatsapp.getAllSession();
+        if (sessions.includes(sessionId)) {
+          ws.on("close", () => {
+            console.log(`Client disconnected for session ${sessionId}`);
+            delete this.wsClients[sessionId];
+            clearInterval(interval); // Clear ping interval on close
+          });
+        } else {
+          this.initializeSession(sessionId, ws);
+          console.log(`Session ${sessionId} started successfully`);
+        }
+      } catch (error) {
+        console.error("Error starting session:", error);
+        throw new Error("Failed to start WhatsApp session");
+      }
+
+      ws.on("close", (code, reason) => {
+        console.log(`WebSocket closed: ${code}, Reason: ${reason || "Unknown reason"}`);
+        delete this.wsClients[sessionId];
+        clearInterval(interval); // Clear interval on close
+      });
+
+      ws.on("error", (error) => {
+        console.error(`WebSocket error: ${error.message}`);
+      });
     });
   }
 }
