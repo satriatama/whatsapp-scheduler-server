@@ -185,13 +185,6 @@ class App {
         throw new Error("Failed to start WhatsApp session");
       }
 
-      ws.on("close", (code, reason) => {
-        this.wsClients[sessionId] = null; // Clear client reference on close
-        console.log(`WebSocket closed: ${code}, Reason: ${reason || "Unknown reason"}`);
-        clearInterval(interval); // Clear ping-pong interval
-        delete this.wsClients[sessionId]; // Remove reference when closed
-      });
-
       ws.on("error", (error) => {
         console.error(`WebSocket error: ${error.message}`);
       });
