@@ -172,6 +172,7 @@ class App {
         if (sessions.includes(sessionId)) {
           ws.on("close", () => {
             console.log(`Client disconnected for session ${sessionId}`);
+            ws.close();
             clearInterval(interval); // Clear ping interval on close
             delete this.wsClients[sessionId]; // Remove client reference on disconnect
           });
