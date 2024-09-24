@@ -140,10 +140,11 @@ class App {
     this.wss.on("connection", (ws, req) => {
       const sessionId = "satriatama"; // Set a unique session ID for the client
 
-      // Cek jika session sudah ada dan ws belum disconnect
-      if (this.wsClients[sessionId] && this.wsClients[sessionId].readyState === ws.OPEN) {
-        console.log(`Session ${sessionId} already connected. Terminating previous connection.`);
-        this.wsClients[sessionId].terminate(); // Close the old WebSocket connection
+      // Check if the client is already connected
+      if (this.wsClients[sessionId]) {
+        console.log(`Client for session ${sessionId} already exists. Closing old connection.`);
+        this.wsClients[sessionId].terminate(); // Terminate the previous connection
+        delete this.wsClients[sessionId]; // Remove old client reference
       }
 
       // Store the new WebSocket connection
@@ -171,8 +172,8 @@ class App {
         if (sessions.includes(sessionId)) {
           ws.on("close", () => {
             console.log(`Client disconnected for session ${sessionId}`);
-            delete this.wsClients[sessionId];
             clearInterval(interval); // Clear ping interval on close
+            delete this.wsClients[sessionId]; // Remove client reference on disconnect
           });
         } else {
           this.initializeSession(sessionId, ws);
@@ -185,8 +186,8 @@ class App {
 
       ws.on("close", (code, reason) => {
         console.log(`WebSocket closed: ${code}, Reason: ${reason || "Unknown reason"}`);
-        delete this.wsClients[sessionId];
-        clearInterval(interval); // Clear interval on close
+        clearInterval(interval); // Clear ping-pong interval
+        delete this.wsClients[sessionId]; // Remove reference when closed
       });
 
       ws.on("error", (error) => {
