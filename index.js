@@ -68,6 +68,8 @@ function scheduleMessage({ sessionId, message, recipients, schedule, filePath })
 
   // Hitung selisih waktu dalam milidetik
   const delay = scheduleTime - currentTime;
+  console.log("currentTime: ", currentTime);
+  console.log("scheduleTime: ", scheduleTime);
   console.log("delay: ", delay);
 
   // Jika waktu yang dijadwalkan sudah lewat, kirim pesan langsung
