@@ -4,10 +4,16 @@ import multer from "multer"; // Untuk menangani upload file
 import fs from "fs";
 import path from "path";
 import { WebSocketServer } from "ws";
+import https from "https"; // Import https untuk server SSL
 
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
+// Baca key dan certificate untuk HTTPS
+const key = fs.readFileSync("key-rsa.pem");
+const cert = fs.readFileSync("cert.pem");
+
+// Setup WebSocket server
 const wss = new WebSocketServer({ noServer: true });
 
 const wsClients = {};
@@ -16,11 +22,12 @@ const wsClients = {};
 async function initializeSession(sessionId, ws) {
   try {
     const socket = await whatsapp.startSession(sessionId);
-      // Daftarkan event listener untuk QR code
     socket.ev.on("connection.update", (update) => {
       const { qr, connection } = update;
       console.log("WebSocket state:", ws ? "Connected" : "Not connected");
-      ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code melalui WebSocket jika ws tersedia dan terbuka
+      if (ws && ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ type: "qr", data: qr })); // Kirim QR code melalui WebSocket jika ws tersedia dan terbuka
+      }
     });
   } catch (error) {
     console.error("Error starting session:", error);
@@ -32,20 +39,17 @@ async function initializeSession(sessionId, ws) {
 async function sendMessage({ sessionId, message, recipients, filePath }) {
   try {
     console.log("Sending message to recipients:", recipients);
-
-    // Mengirim pesan teks ke setiap penerima
     await whatsapp.sendTextMessage({
       sessionId,
       to: recipients,
       text: message,
     });
 
-    // Jika ada file yang harus dikirim
     if (filePath) {
       await whatsapp.sendMediaMessage({
         sessionId,
         to: recipients,
-        filePath, // path file yang dikirim
+        filePath,
       });
     }
 
@@ -60,17 +64,12 @@ async function sendMessage({ sessionId, message, recipients, filePath }) {
 function scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
   const currentTime = new Date();
   const scheduleTime = new Date(schedule);
-
-  // Hitung selisih waktu dalam milidetik
   const delay = scheduleTime - currentTime;
-  console.log("delay: ", delay);
 
-  // Jika waktu yang dijadwalkan sudah lewat, kirim pesan langsung
   if (delay <= 0) {
     return sendMessage({ sessionId, message, recipients, filePath });
   }
 
-  // Jadwalkan pengiriman pesan
   setTimeout(() => {
     sendMessage({ sessionId, message, recipients, filePath });
   }, delay);
@@ -95,10 +94,9 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
 
     const recipientsArray = JSON.parse(recipients); // Parse JSON string for recipients
 
-    // Jika ada file yang diupload
     let filePath = null;
     if (req.file) {
-      filePath = path.join(__dirname, req.file.path); // Path file yang diupload
+      filePath = path.join(__dirname, req.file.path);
     }
 
     const sessions = whatsapp.getAllSession();
@@ -107,7 +105,6 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
       whatsapp.startSession(sessionId);
     }
 
-    // Panggil fungsi scheduleMessage untuk mengatur jadwal pengiriman pesan
     scheduleMessage({
       sessionId,
       message,
@@ -121,19 +118,17 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
     console.error("Error in API:", error);
     res.status(500).json({ error: "Gagal menjadwalkan pesan." });
   } finally {
-    // Hapus file setelah dikirim (optional)
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
   }
 });
 
-app.server = app.listen(port, () => {
-  console.log(`Server berjalan di http://localhost:${port}`);
-});
+// Membuat HTTPS server
+const httpsServer = https.createServer({ key, cert }, app);
 
-// Upgrade HTTP server to handle WebSocket
-app.server.on("upgrade", (request, socket, head) => {
+// Upgrade HTTPS server to handle WebSocket
+httpsServer.on("upgrade", (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit("connection", ws, request);
   });
@@ -141,19 +136,18 @@ app.server.on("upgrade", (request, socket, head) => {
 
 // WebSocket connection logic
 wss.on("connection", (ws, req) => {
-  const sessionId = "satriatama"
+  const sessionId = "satriatama";
 
   if (sessionId) {
-    wsClients[sessionId] = ws; // Simpan WebSocket client berdasarkan sessionId
+    wsClients[sessionId] = ws;
     console.log(`Client connected for session ${sessionId}`);
-    // Inisialisasi sesi dan kirim QR code atau pesan connected
     try {
       const sessions = whatsapp.getAllSession();
       if (sessions.includes(sessionId)) {
         console.log(`Session ${sessionId} already started`);
         ws.on("close", () => {
           console.log(`Client disconnected for session ${sessionId}`);
-          delete wsClients[sessionId]; // Hapus client ketika terputus
+          delete wsClients[sessionId];
         });
       } else {
         initializeSession(sessionId, ws);
@@ -166,7 +160,12 @@ wss.on("connection", (ws, req) => {
 
     ws.on("close", () => {
       console.log(`Client disconnected for session ${sessionId}`);
-      delete wsClients[sessionId]; // Hapus client ketika terputus
+      delete wsClients[sessionId];
     });
   }
+});
+
+// Jalankan HTTPS server
+httpsServer.listen(port, () => {
+  console.log(`Server berjalan di https://localhost:${port}`);
 });
