@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import https from "https"; // Import https module
 import { WebSocketServer } from "ws";
+import { DateTime } from "luxon";
 
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
@@ -62,10 +63,8 @@ async function sendMessage({ sessionId, message, recipients, filePath }) {
 
 // Fungsi untuk menjadwalkan pengiriman pesan
 function scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
-  const currentTime = new Date(); // UTC time from the server
-
-  const scheduleTime = new Date(schedule); // Waktu dari input user dalam zona Jakarta
-  scheduleTime.setHours(scheduleTime.getHours() - 7); // Konversi ke UTC dengan mengurangi 7 jam
+  const currentTime = DateTime.utc(); // Ambil waktu UTC sekarang
+  const scheduleTime = DateTime.fromISO(schedule, { zone: 'Asia/Jakarta' }).toUTC(); // Konversi dari waktu Jakarta ke UTC
 
   // Hitung selisih waktu dalam milidetik
   const delay = scheduleTime - currentTime;
