@@ -62,8 +62,10 @@ async function sendMessage({ sessionId, message, recipients, filePath }) {
 
 // Fungsi untuk menjadwalkan pengiriman pesan
 function scheduleMessage({ sessionId, message, recipients, schedule, filePath }) {
-  const currentTime = new Date();
-  const scheduleTime = new Date(schedule);
+  const currentTime = new Date(); // UTC time from the server
+
+  const scheduleTime = new Date(schedule); // Waktu dari input user dalam zona Jakarta
+  scheduleTime.setHours(scheduleTime.getHours() - 7); // Konversi ke UTC dengan mengurangi 7 jam
 
   // Hitung selisih waktu dalam milidetik
   const delay = scheduleTime - currentTime;
@@ -79,6 +81,7 @@ function scheduleMessage({ sessionId, message, recipients, schedule, filePath })
     sendMessage({ sessionId, message, recipients, filePath });
   }, delay);
 }
+
 
 // Inisialisasi Express
 const app = express();
