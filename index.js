@@ -10,6 +10,9 @@ import { DateTime } from "luxon";
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const key = fs.readFileSync(path.join(__dirname, "selfsigned.key"));
 const cert = fs.readFileSync(path.join(__dirname, "selfsigned.crt"));
 
