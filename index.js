@@ -6,16 +6,12 @@ import path from "path";
 import https from "https"; // Import https module
 import { WebSocketServer } from "ws";
 import { DateTime } from "luxon";
-import { fileURLToPath } from 'url';
 
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const key = fs.readFileSync(path.join(__dirname, "selfsigned.key"));
-const cert = fs.readFileSync(path.join(__dirname, "selfsigned.crt"));
+const key = fs.readFileSync("selfsigned.key", "utf-8"); // Load private key
+const cert = fs.readFileSync("selfsigned.key", "utf-8"); // Load certificate
 
 const wss = new WebSocketServer({ noServer: true }); // WebSocket on HTTPS requires noServer
 
@@ -141,11 +137,7 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
 });
 
 // Create HTTPS server with certificate and key
-const options = {
-  key: key,
-  cert: cert,
-}
-const server = https.createServer(options, app);
+const server = https.createServer({ key, cert }, app);
 
 // Upgrade HTTP server to handle WebSocket
 server.on("upgrade", (request, socket, head) => {
