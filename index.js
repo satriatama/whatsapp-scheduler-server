@@ -10,8 +10,8 @@ import { DateTime } from "luxon";
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
-const key = fs.readFileSync("selfsigned.key"); // Load private key
-const cert = fs.readFileSync("selfsigned.crt"); // Load certificate
+const key = fs.readFileSync(path.join(__dirname, "selfsigned.key"));
+const cert = fs.readFileSync(path.join(__dirname, "selfsigned.crt"));
 
 const wss = new WebSocketServer({ noServer: true }); // WebSocket on HTTPS requires noServer
 
