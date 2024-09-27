@@ -137,7 +137,11 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
 });
 
 // Create HTTPS server with certificate and key
-const server = https.createServer({ key, cert }, app);
+const options = {
+  key: key,
+  cert: cert,
+}
+const server = https.createServer(options, app);
 
 // Upgrade HTTP server to handle WebSocket
 server.on("upgrade", (request, socket, head) => {
