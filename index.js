@@ -11,10 +11,14 @@ import { fileURLToPath } from "url";
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const options = {
   key: fs.readFileSync(path.join(__dirname, "key.pem")),
   cert: fs.readFileSync(path.join(__dirname, "cert.pem")),
 };
+
 
 const wss = new WebSocketServer({ noServer: true }); // WebSocket on HTTPS requires noServer
 
