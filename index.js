@@ -15,8 +15,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const options = {
-  key: fs.readFileSync(path.join(__dirname, "key.pem")),
-  cert: fs.readFileSync(path.join(__dirname, "cert.pem")),
+  key: fs.readFileSync(path.join(__dirname, "key.pem"), "utf8"),
+  cert: fs.readFileSync(path.join(__dirname, "cert.pem"), "utf8"),
 };
 
 
