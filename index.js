@@ -11,11 +11,10 @@ import { fileURLToPath } from "url";
 // Setup storage untuk file uploads (optional jika file perlu disimpan sementara)
 const upload = multer({ dest: "uploads/" });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const key = fs.readFileSync(path.join(__dirname, "selfsigned.key"), "utf8");
-const cert = fs.readFileSync(path.join(__dirname, "selfsigned.crt"), "utf8");
+const options = {
+  key: fs.readFileSync(path.join(__dirname, "key.pem")),
+  cert: fs.readFileSync(path.join(__dirname, "cert.pem")),
+};
 
 const wss = new WebSocketServer({ noServer: true }); // WebSocket on HTTPS requires noServer
 
@@ -141,7 +140,7 @@ app.post("/api/send-message", upload.single("file"), async (req, res) => {
 });
 
 // Create HTTPS server with certificate and key
-const server = https.createServer({ key, cert }, app);
+const server = https.createServer(options, app);
 
 // Upgrade HTTP server to handle WebSocket
 server.on("upgrade", (request, socket, head) => {
